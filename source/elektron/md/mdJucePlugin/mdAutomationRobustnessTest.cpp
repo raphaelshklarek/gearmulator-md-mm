@@ -309,6 +309,48 @@ namespace
 		}
 	}
 
+	void verifySysexImportDropsMidiNoneIntent(const md::MachineModel _model)
+	{
+		using Access = mdJucePlugin::ControllerAutomationTestAccess;
+		using Status = md::automation::sysex::StatusParameter;
+		Harness harness(_model);
+		auto& controller = harness.controller;
+		Access::useSyntheticFirmware(controller);
+		primeSyntheticSnapshot(harness);
+		auto& probe = *parameters(harness, false).front();
+		const auto reply = [&](const pluginLib::SysEx& message)
+		{
+			controller.parseSysexMessage(message, synthLib::MidiEventSource::Device);
+		};
+
+		Access::pollNow(controller);
+		reply(statusResponse(_model, Status::Kit, 0));
+		reply(statusResponse(_model, Status::Global, 0));
+		reply(makeGlobalDump(_model, 0, 0x7f));
+		require(controller.getAutomationBaseChannel() == 0x7f, "Global did not switch to MIDI NONE");
+
+		const auto transmitted = controller.getTransmittedAutomationChangeCount();
+		hostWrite(probe, 87);
+		Access::tick(controller);
+		require(controller.getTransmittedAutomationChangeCount() == transmitted,
+			"MIDI NONE transmitted queued host intent");
+
+		// The imported file replaces the machine's contents; the earlier intent is stale.
+		controller.onUserSysexImported();
+		reply(statusResponse(_model, Status::Global, 0));
+		reply(statusResponse(_model, Status::Kit, 0));
+		reply(makeGlobalDump(_model, 0, 3));
+		reply(makeKitDump(_model, 0, 42));
+		Access::tick(controller);
+		require(controller.isAutomationSynchronized()
+			&& controller.getAutomationBaseChannel() == 3,
+			"import resynchronization did not complete");
+		require(controller.getTransmittedAutomationChangeCount() == transmitted,
+			"pre-import intent was replayed over imported data");
+		require(snapshotValue(controller.createAutomationSnapshot(), probe) == 42,
+			"imported Kit value did not replace pre-import intent");
+	}
+
 	void verifyPeriodicControllerPolling(const md::MachineModel _model)
 	{
 		using Access = mdJucePlugin::ControllerAutomationTestAccess;
@@ -1241,6 +1283,7 @@ namespace
 		verifyRetriedKitSynchronization(_model, false);
 		verifyRetriedKitSynchronization(_model, true);
 		verifyPeriodicControllerPolling(_model);
+		verifySysexImportDropsMidiNoneIntent(_model);
 		if(_model == md::MachineModel::Machinedrum)
 			verifyRamRecordingModeState();
 		verifyPendingStateBeforeSynchronization(_model);

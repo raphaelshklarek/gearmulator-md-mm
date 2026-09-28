@@ -48,6 +48,11 @@ namespace mdJucePlugin
 		int getPatternStatus() const { return m_patternStatus.load(std::memory_order_acquire); }
 		void requestPatternStatus() const;
 
+		// A user SysEx import replaced the machine's contents. Changes still waiting
+		// for a routable MIDI channel predate it and must not be replayed over the
+		// imported data, so they are dropped and Global/Kit are re-read.
+		void onUserSysexImported();
+
 		bool isAutomationSynchronized() const
 		{
 			return m_automationReady.load(std::memory_order_acquire);

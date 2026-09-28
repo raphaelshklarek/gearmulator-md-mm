@@ -344,6 +344,31 @@ namespace mdJucePlugin
 		sendMidiEvent(event);
 	}
 
+	void Controller::onUserSysexImported()
+	{
+		{
+			const std::lock_guard synchronizationLock(m_synchronizationLock);
+			for(auto& slot : m_automationSlots)
+			{
+				auto observed = slot.publication.load(std::memory_order_acquire);
+				while(publicationIsDirty(observed)
+					&& !slot.publication.compare_exchange_weak(observed, observed & ~PublicationDirty,
+						std::memory_order_acq_rel, std::memory_order_acquire))
+				{
+				}
+				// Retire queued delivery hints and recovery markers for the dropped values.
+				const auto floor = publicationRevision(observed) + 1;
+				auto current = slot.deliveryFloorRevision.load(std::memory_order_acquire);
+				while(current < floor && !slot.deliveryFloorRevision.compare_exchange_weak(current, floor,
+					std::memory_order_acq_rel, std::memory_order_acquire))
+				{
+				}
+				slot.scanPublication.store(0, std::memory_order_release);
+			}
+		}
+		requestAutomationState(true);
+	}
+
 	void Controller::requestPatternStatus() const
 	{
 		sendSynchronizationRequest(toPluginSysex(md::automation::sysex::statusRequest(m_model,

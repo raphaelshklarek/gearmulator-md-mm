@@ -1699,6 +1699,11 @@ namespace mdJucePlugin
 				auto* const device = dynamic_cast<md::Device*>(_device);
 				return device && device->retireUserSysexImport(progress->ticket, retiredPayload);
 			});
+		// Imported data is now the machine's state, even for a partial transfer
+		// (nothing is rolled back); stop older pending edits from replaying over it.
+		if(progress && progress->sent != 0)
+			m_controller.onUserSysexImported();
+
 		// Destruction remains outside the device lock and therefore outside any
 		// interval in which it can block the real-time process callback.
 		if(progress && progress->state == md::MidiSysexTransferState::Complete)
