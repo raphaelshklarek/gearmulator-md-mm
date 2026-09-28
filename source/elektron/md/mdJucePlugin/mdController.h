@@ -9,11 +9,13 @@
 #include <atomic>
 #include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 
 namespace mdJucePlugin
 {
 	class AudioPluginAudioProcessor;
+	class PushPanelController;
 	struct ControllerAutomationTestAccess;
 
 	class Controller : public pluginLib::Controller
@@ -38,6 +40,13 @@ namespace mdJucePlugin
 
 		void sendParameterChange(const pluginLib::Parameter& _parameter,
 			pluginLib::ParamValue _value, pluginLib::Parameter::Origin _origin) override;
+
+		md::MachineModel getModel() const { return m_model; }
+
+		// Active pattern (0 = A01 .. 127 = H16) from the latest firmware status
+		// reply, -1 until one arrived. Only polled on request.
+		int getPatternStatus() const { return m_patternStatus.load(std::memory_order_acquire); }
+		void requestPatternStatus() const;
 
 		bool isAutomationSynchronized() const
 		{
@@ -157,6 +166,8 @@ namespace mdJucePlugin
 		static uint64_t milliseconds();
 
 		const md::MachineModel m_model;
+		std::unique_ptr<PushPanelController> m_pushPanelController;
+		std::atomic<int> m_patternStatus{-1};
 		std::atomic<uint8_t> m_baseChannel{0x7f};
 		std::atomic<bool> m_haveGlobal{false};
 		std::atomic<bool> m_haveKit{false};

@@ -1,6 +1,7 @@
 #include "mdController.h"
 
 #include "mdPluginProcessor.h"
+#include "mdPushPanelController.h"
 #include "mdLib/mdautomation.h"
 #include "mdLib/mddevice.h"
 #include "mdLib/mdsysexautomation.h"
@@ -73,10 +74,17 @@ namespace mdJucePlugin
 		}
 
 		requestAutomationState();
+
+		m_pushPanelController = std::make_unique<PushPanelController>(*this);
 	}
 
 	Controller::~Controller()
 	{
+		// Torn down first and explicitly: its destructor releases any held panel
+		// input, which dispatches through this Controller and the Plugin/Device,
+		// so it must run while both are still fully intact.
+		m_pushPanelController.reset();
+
 		// Stop the base Timer while all derived synchronization members still exist.
 		// Waiting until pluginLib::Controller's destructor would leave a teardown
 		// window in which its callback can dispatch into partially destroyed state.
@@ -334,6 +342,12 @@ namespace mdJucePlugin
 		event.sysex = _message;
 		m_synchronizationRequests.fetch_add(1, std::memory_order_relaxed);
 		sendMidiEvent(event);
+	}
+
+	void Controller::requestPatternStatus() const
+	{
+		sendSynchronizationRequest(toPluginSysex(md::automation::sysex::statusRequest(m_model,
+			md::automation::sysex::StatusParameter::Pattern)));
 	}
 
 	void Controller::onControllerTimer()
@@ -856,6 +870,7 @@ namespace mdJucePlugin
 				return true;
 			}
 			case md::automation::sysex::StatusParameter::Pattern:
+				m_patternStatus.store(status->value, std::memory_order_release);
 				return true;
 			}
 		}

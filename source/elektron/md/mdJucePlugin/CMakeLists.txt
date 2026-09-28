@@ -27,6 +27,7 @@ set(SOURCES
 	mdProductSkinPolicy.h
 	mdProductSkins.h
 	mdPluginProcessor.cpp mdPluginProcessor.h
+	mdPushPanelController.cpp mdPushPanelController.h
 	mdStorageImage.cpp mdStorageImage.h
 	mdPluginEntry.cpp
 
