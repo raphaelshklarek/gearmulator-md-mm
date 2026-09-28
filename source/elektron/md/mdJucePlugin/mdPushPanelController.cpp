@@ -126,10 +126,11 @@ namespace mdJucePlugin
 		constexpr int g_pageLedBaseCc = 102;
 		constexpr int g_pageCount = 4;
 
-		// Two-row blocks with an empty row between them: trigs (rows 1-2), tracks
-		// (rows 4-5), per-track mute toggles (rows 7-8).
-		constexpr int g_trackRowBaseNote = g_padBaseNote + g_padColumns * 3;
-		constexpr int g_muteRowBaseNote = g_trackRowBaseNote + g_padColumns * 3;
+		// Two-row blocks, bottom to top: trigs (rows 1-2), tracks (3-4), per-track
+		// mute toggles (5-6), pattern selection (7-8).
+		constexpr int g_trackRowBaseNote = g_padBaseNote + g_padColumns * 2;
+		constexpr int g_muteRowBaseNote = g_trackRowBaseNote + g_padColumns * 2;
+		constexpr int g_patternRowBaseNote = g_muteRowBaseNote + g_padColumns * 2;
 
 		constexpr int g_ledIntervalMs = 40;
 
@@ -139,6 +140,7 @@ namespace mdJucePlugin
 		constexpr int g_patternBlinkTicks = 240 / g_ledIntervalMs;
 		constexpr int g_patternTimeoutTicks = 60000 / g_ledIntervalMs;
 		constexpr int g_bankACc = 20;	// Bank A-D on consecutive CCs
+		constexpr uint32_t g_patternSelectTimeoutMs = 2200;
 		constexpr int g_reconnectEveryTicks = 1500 / g_ledIntervalMs;
 		constexpr int g_ledFullRefreshEveryTicks = 1000 / g_ledIntervalMs;	// Push drops them on mode switches
 
@@ -149,8 +151,8 @@ namespace mdJucePlugin
 			return g_padBaseNote + row * g_padColumns + _trigIndex % g_padColumns;
 		}
 
-		// Two-row track blocks put tracks 1-8 on the upper row and 9-16 below, so
-		// the grid reads top-down: mutes 1-8, 9-16, tracks 1-8, 9-16, trigs 1-8, 9-16.
+		// Two-row blocks put 1-8 on the upper row and 9-16 below, so the grid reads
+		// top-down: patterns, mutes, tracks, trigs, each 1-8 then 9-16.
 		int padNoteForTrack(const int _trackIndex, const int _baseNote = g_trackRowBaseNote)
 		{
 			const auto row = 1 - _trackIndex / g_padColumns;
@@ -361,32 +363,48 @@ namespace mdJucePlugin
 		const auto isMonomachine = m_controller.getModel() == md::MachineModel::Monomachine;
 
 		// Outside grid record the MD's trig LEDs just echo the playing tracks, which
-		// the track rows already show. The trig rows only mirror them while they mean
-		// something: grid record (steps) or a held bank button (pattern selection).
-		const auto bankHeld = std::any_of(g_buttons.begin(), g_buttons.end(), [&](const ButtonMapping& _b)
-		{
-			return _b.control >= md::PanelControl::BankGroup && _b.control <= md::PanelControl::BankD
-				&& m_buttonDown[static_cast<size_t>(_b.cc)].load(std::memory_order_relaxed);
-		});
+		// the track rows already show. The trig rows only mirror them in grid record
+		// (steps) or Accent/Swing mode.
+		const auto recordLed = panel.getModeLed(md::FrontPanel::ModeLed::Record);
+		const auto extendedBanks = panel.getModeLed(md::FrontPanel::ModeLed::BankGroupEH);
 		// Live recording's trig LEDs only echo playback (and the MD's Record LED
 		// blinks meanwhile), so it is tracked from Capture until Stop/Record/Exit.
-		const auto recordLed = panel.getModeLed(md::FrontPanel::ModeLed::Record);
 		const auto liveRecording = m_liveRecording.load(std::memory_order_relaxed);
-		const auto showTrigs = bankHeld || (recordLed && !liveRecording)
-			|| m_trigModeCc.load(std::memory_order_relaxed) >= 0;
+		const auto showTrigs = (recordLed && !liveRecording) || m_trigModeCc.load(std::memory_order_relaxed) >= 0;
 
-		updatePendingPattern(panel.getModeLed(md::FrontPanel::ModeLed::BankGroupEH));
+		// Pattern selection (bank held or tapped): the MD's trig LEDs show the
+		// bank's patterns, mirrored on the pattern rows instead of the trig rows.
+		// The MD closes a pattern selection left open by a released bank on its own
+		// (measured ~2.3 s after the release; no LED reports it). Follow it.
+		if(heldBank() < 0 && m_selectBank.load(std::memory_order_relaxed) >= 0
+			&& juce::Time::getMillisecondCounter() - m_bankReleaseMs.load(std::memory_order_relaxed) > g_patternSelectTimeoutMs)
+			m_selectBank.store(-1, std::memory_order_relaxed);
+		const auto selecting = m_selectBank.load(std::memory_order_relaxed) >= 0 || heldBank() >= 0;
+
+		updatePendingPattern(extendedBanks);
 		const auto pendingTrig = m_pendingPattern >= 0 ? m_pendingPattern % 16 : -1;
 		const auto blinkOn = (m_pendingPatternTicks / g_patternBlinkTicks) % 2 == 0;
 
 		for(int i = 0; i < 16; ++i)
 		{
-			auto color = g_colorDim;
-			if(i == pendingTrig)
+			auto color = g_colorOff;
+			if(selecting)
+			{
+				color = isMonomachine
+					? stepLedColor(panel.getMonomachineStepLedColor(i))
+					: (panel.getStepLed(i) ? g_colorRed : g_colorDim);
+			}
+			else if(i == pendingTrig)
 			{
 				color = blinkOn ? g_colorRed : g_colorDim;
 			}
-			else if(showTrigs)
+			sendLed(false, padNoteForTrack(i, g_patternRowBaseNote), color);
+		}
+
+		for(int i = 0; i < 16; ++i)
+		{
+			auto color = g_colorDim;
+			if(showTrigs && !selecting)
 			{
 				color = isMonomachine
 					? stepLedColor(panel.getMonomachineStepLedColor(i))
@@ -468,6 +486,7 @@ namespace mdJucePlugin
 			sendLed(false, padNoteForTrig(i), g_colorOff);
 			sendLed(false, padNoteForTrack(i), g_colorOff);
 			sendLed(false, padNoteForTrack(i, g_muteRowBaseNote), g_colorOff);
+			sendLed(false, padNoteForTrack(i, g_patternRowBaseNote), g_colorOff);
 		}
 		for(const auto& button : g_buttons)
 			sendLed(true, button.cc, g_colorOff);
@@ -517,6 +536,12 @@ namespace mdJucePlugin
 				return;
 			}
 
+			if(const auto pattern = trackForNote(_message.getNoteNumber(), g_patternRowBaseNote))
+			{
+				handlePatternPad(*pattern, isOn);
+				return;
+			}
+
 			if(const auto track = trackForNote(_message.getNoteNumber(), g_muteRowBaseNote))
 			{
 				// Parameters belong to the message thread; the LED timer applies it.
@@ -529,18 +554,10 @@ namespace mdJucePlugin
 			if(!control)
 				return;
 
-			// Bank A-D held + trig selects a pattern; remember it for the countdown.
+			// During pattern selection a trig picks a pattern on the MD, as on the
+			// hardware; remember it for the countdown.
 			if(isOn)
-			{
-				for(int bank = 0; bank < 4; ++bank)
-				{
-					if(!m_buttonDown[static_cast<size_t>(g_bankACc + bank)].load(std::memory_order_relaxed))
-						continue;
-					const auto trig = static_cast<int>(*control) - static_cast<int>(md::PanelControl::Trigger1);
-					m_patternRequest.store(bank * 16 + trig, std::memory_order_relaxed);
-					break;
-				}
-			}
+				notePatternPick(static_cast<int>(*control) - static_cast<int>(md::PanelControl::Trigger1));
 
 			if(isOn)
 				press(*control);
@@ -563,6 +580,14 @@ namespace mdJucePlugin
 			m_buttonDown[static_cast<size_t>(cc)].store(value != 0, std::memory_order_relaxed);
 			if(value != 0)
 			{
+				// A bank press starts pattern selection; on the MD it lasts until a trig
+				// picks a pattern, even after the bank is released. Bank group and
+				// Function may be used on the way; anything else leaves it.
+				if(*control >= md::PanelControl::BankA && *control <= md::PanelControl::BankD)
+					m_selectBank.store(static_cast<int>(*control) - static_cast<int>(md::PanelControl::BankA), std::memory_order_relaxed);
+				else if(*control != md::PanelControl::BankGroup && *control != md::PanelControl::Function)
+					m_selectBank.store(-1, std::memory_order_relaxed);
+
 				if(std::find(g_trigModeExits.begin(), g_trigModeExits.end(), *control) != g_trigModeExits.end())
 					m_trigModeCc.store(-1, std::memory_order_relaxed);
 				if(*control == md::PanelControl::Stop || *control == md::PanelControl::Record || *control == md::PanelControl::Exit)
@@ -572,6 +597,8 @@ namespace mdJucePlugin
 			else
 			{
 				release(*control);
+				if(*control >= md::PanelControl::BankA && *control <= md::PanelControl::BankD)
+					m_bankReleaseMs.store(juce::Time::getMillisecondCounter(), std::memory_order_relaxed);
 			}
 			return;
 		}
@@ -596,6 +623,43 @@ namespace mdJucePlugin
 			sendEncoderSteps(md::PanelEncoder::SoundSelection, relativeDelta(value), g_encoderBurstCap);
 		else if(cc == g_levelWheelCc)
 			sendEncoderSteps(md::PanelEncoder::Level, relativeDelta(value), g_encoderBurstCap);
+	}
+
+	int PushPanelController::heldBank() const
+	{
+		for(int bank = 0; bank < 4; ++bank)
+		{
+			if(m_buttonDown[static_cast<size_t>(g_bankACc + bank)].load(std::memory_order_relaxed))
+				return bank;
+		}
+		return -1;
+	}
+
+	void PushPanelController::notePatternPick(const int _trig)
+	{
+		auto bank = heldBank();
+		const auto tapped = m_selectBank.exchange(-1, std::memory_order_relaxed);
+		if(bank < 0)
+			bank = tapped;
+		if(bank >= 0)
+			m_patternRequest.store(bank * 16 + _trig, std::memory_order_relaxed);
+	}
+
+	void PushPanelController::handlePatternPad(const int _pattern, const bool _isOn)
+	{
+		// The pattern rows are the MD's trig keys during pattern selection only.
+		const auto control = static_cast<md::PanelControl>(static_cast<int>(md::PanelControl::Trigger1) + _pattern);
+		if(!_isOn)
+		{
+			release(control);
+			return;
+		}
+
+		if(m_selectBank.load(std::memory_order_relaxed) < 0 && heldBank() < 0)
+			return;
+
+		notePatternPick(_pattern);
+		press(control);
 	}
 
 	void PushPanelController::updatePendingPattern(const bool _extendedBanks)

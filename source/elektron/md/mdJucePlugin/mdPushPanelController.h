@@ -63,6 +63,9 @@ namespace mdJucePlugin
 		// _modifier + _control held while the Push button is down.
 		void applyMuteToggles();
 		void updatePendingPattern(bool _extendedBanks);
+		void handlePatternPad(int _pattern, bool _isOn);
+		int heldBank() const;
+		void notePatternPick(int _trig);
 		void handleChord(int _cc, md::PanelControl _modifier, md::PanelControl _control, bool _showsTrigs, bool _isDown);
 		void handleTrackPad(int _track, bool _isOn);
 		void handleTouchStrip(int _pitchWheelValue);
@@ -98,6 +101,9 @@ namespace mdJucePlugin
 
 		// Pattern picked on Push (bank A-D * 16 + trig) from the MIDI thread, -1 = none.
 		std::atomic<int> m_patternRequest{-1};
+		// Bank (0-3) of a pattern selection still waiting for a trig, -1 = none.
+		std::atomic<int> m_selectBank{-1};
+		std::atomic<uint32_t> m_bankReleaseMs{0};
 		// LED-timer side: pattern (0-127) waiting for its countdown, -1 = none.
 		int m_pendingPattern = -1;
 		int m_pendingPatternTicks = 0;

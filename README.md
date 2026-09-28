@@ -50,15 +50,17 @@ between controlling Live and controlling the Machinedrum. There's nothing to re-
 
 📄 [Printable cheat sheet (PDF)](doc/push3_cheatsheet.pdf)
 
-**Pads** (top to bottom, with an empty row between blocks)
+**Pads** (top to bottom)
 
 | Rows | Function |
 |---|---|
-| 8 / 7 | Mutes 1–8 / 9–16. Tap to mute or unmute (red = playing) |
-| 5 / 4 | Tracks 1–8 / 9–16. Tap to select a track |
-| 2 / 1 | Trigs 1–8 / 9–16. Lit in grid record, while holding a bank, or in Accent/Swing mode |
+| 8 / 7 | Patterns 1–8 / 9–16. Shown while a bank is selected; tap to pick a pattern |
+| 6 / 5 | Mutes 1–8 / 9–16. Tap to mute or unmute (red = playing) |
+| 4 / 3 | Tracks 1–8 / 9–16. Tap to select a track |
+| 2 / 1 | Trigs 1–8 / 9–16. Sequencer steps in grid record or Accent/Swing mode |
 
-To select a pattern, hold a bank button (lower row 1–4) and tap a trig pad. The pad
+To select a pattern, tap or hold a bank button (lower row 1–4). The top two rows then
+show that bank's patterns, like the trig LEDs on the hardware. Tap one to pick it. It
 blinks until the pattern switches.
 
 **Buttons and knobs**
