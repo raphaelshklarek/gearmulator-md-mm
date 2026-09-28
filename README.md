@@ -34,6 +34,57 @@ Link to a short demo on Youtube:
   functions. Additional output pairs are available in a multi-output VST3 host;
   the standalone apps use stereo output.
 
+## Ableton Push 3 control
+
+Play the Machinedrum's front panel from an Ableton Push 3 in **User Mode**. The plugin
+connects to Push's "User Port" by itself, so pressing Push's **User** button switches
+between controlling Live and controlling the Machinedrum. There's nothing to re-route.
+
+**Setup**
+
+1. Connect Push 3 over USB (standalone models: Control mode) and load Gearmulator MD.
+   Use only one instance.
+2. In Live > Settings > Link, Tempo & MIDI, turn **Track** and **Remote** off for the
+   *Ableton Push 3 User Port* input.
+3. Press **User** on Push. Press it again to return to Live.
+
+📄 [Printable cheat sheet (PDF)](doc/push3_cheatsheet.pdf)
+
+**Pads** (top to bottom, with an empty row between blocks)
+
+| Rows | Function |
+|---|---|
+| 8 / 7 | Mutes 1–8 / 9–16. Tap to mute or unmute (red = playing) |
+| 5 / 4 | Tracks 1–8 / 9–16. Tap to select a track |
+| 2 / 1 | Trigs 1–8 / 9–16. Lit in grid record, while holding a bank, or in Accent/Swing mode |
+
+To select a pattern, hold a bank button (lower row 1–4) and tap a trig pad. The pad
+blinks until the pattern switches.
+
+**Buttons and knobs**
+
+| Push 3 | Machinedrum |
+|---|---|
+| Encoders 1–8 | Data entry A–H |
+| Left jog wheel / touch strip | Level (fine / fast slide) |
+| Right jog wheel | Track select |
+| Shift | Function |
+| D-pad arrows / centre | Arrow buttons / Enter (Yes) |
+| Master | Exit (No) |
+| Select | Synthesis / Effects / Routing |
+| Note | Kit |
+| Play / Stop / Tap Tempo | Play / Stop / Tempo |
+| Record | Grid record |
+| Capture | Live record (Record + Play) |
+| Double Loop | Next trig page (Scale) |
+| Lower row 1–4 (below display) | Bank A–D |
+| Upper row 1–4 (above display) | Page lights 1–4 |
+| Hot Swap | Bank group A–D / E–H |
+| Mute / Accent / Quantize / Gear (Setup) | Mute mode / Accent / Swing / Global |
+
+Mapped buttons glow and brighten while held. Live keeps the Push display while it runs,
+so the Machinedrum screen stays in the plugin window. Function shortcuts are Machinedrum only.
+
 ## Implementation references
 
 - [TurboMIDI negotiation](doc/turbomidi.md): a worked exchange, firmware observations,
